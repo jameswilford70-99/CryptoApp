@@ -3,9 +3,19 @@ import pandas as pd
 import requests
 import plotly.express as px
 
+# 1. Page Config
 st.set_page_config(page_title="Crypto Grid (£)", layout="wide")
 
-# 1. Your Portfolio
+# Custom CSS to make sure the borders are clearly visible
+st.markdown("""
+    <style>
+    div[data-testid="stVerticalBlock"] > div:has(div[data-testid="stVerticalBlock"]) {
+        border-radius: 10px;
+    }
+    </style>
+    """, unsafe_base_with_rows=True)
+
+# 2. Your Portfolio
 MY_PORTFOLIO = {
     'bitcoin': 0.1, 'ethereum': 1.0, 'solana': 10.0, 
     'ripple': 500.0, 'toncoin': 50.0, 'cardano': 250.0
@@ -30,42 +40,59 @@ st.title("📊 Crypto Grid (£)")
 try:
     data = fetch_prices()
     total_val = sum(c['current_price'] * MY_PORTFOLIO[c['id']] for c in data)
-    st.sidebar.metric("Total Balance", f"£{total_val:,.2f}")
+    
+    # Header Info
+    st.metric("Total Portfolio Balance", f"£{total_val:,.2f}")
+    st.divider()
 
-    # Process data in chunks of 2 to create rows
+    # Process data in chunks of 2 for the grid
     for i in range(0, len(data), 2):
-        cols = st.columns(2) # Create 2 side-by-side columns
+        cols = st.columns(2)
         
         for j in range(2):
             if i + j < len(data):
                 coin = data[i + j]
                 with cols[j]:
-                    # Compact Header
-                    st.markdown(f"**{coin['symbol'].upper()}** £{coin['current_price']:,}")
-                    
-                    # Chart Logic
-                    df = fetch_history(coin['id'])
-                    fig = px.line(df, x='Date', y='Price', template="plotly_dark")
-                    
-                    # Shrink chart for side-by-side view
-                    fig.update_xaxes(
-                        rangeslider_visible=False,
-                        rangeselector=dict(
-                            buttons=list([
-                                dict(count=7, label="7D", step="day", stepmode="backward"),
-                                dict(count=1, label="1M", step="month", stepmode="backward"),
-                                dict(step="all", label="MAX")
-                            ]),
-                            font=dict(size=10) # Smaller font for small screen
+                    # The 'border=True' creates the white/grey box around the crypto
+                    with st.container(border=True):
+                        st.markdown(f"**{coin['name']}** ({coin['symbol'].upper()})")
+                        
+                        # Price and Change
+                        price = coin['current_price']
+                        change = coin['price_change_percentage_24h'] or 0
+                        st.caption(f"Price: £{price:,.2f} ({change:+.2f}%)")
+                        
+                        # Chart
+                        df = fetch_history(coin['id'])
+                        fig = px.line(df, x='Date', y='Price', template="plotly_dark")
+                        
+                        fig.update_xaxes(
+                            rangeslider_visible=False,
+                            rangeselector=dict(
+                                buttons=list([
+                                    dict(count=7, label="7D", step="day", stepmode="backward"),
+                                    dict(count=1, label="1M", step="month", stepmode="backward"),
+                                    dict(step="all", label="MAX")
+                                ]),
+                                font=dict(size=9),
+                                y=1.1 # Move buttons slightly up
+                            )
                         )
-                    )
-                    fig.update_layout(
-                        height=250, # Shorter height to fit 2-up
-                        margin=dict(l=0, r=0, t=20, b=0),
-                        yaxis_visible=False, # Hide Y axis to save space
-                        xaxis_title=None
-                    )
-                    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        
+                        fig.update_layout(
+                            height=200,
+                            margin=dict(l=5, r=5, t=5, b=5),
+                            yaxis_visible=False,
+                            xaxis_title=None,
+                            xaxis_visible=True # Show dates on the bottom
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        
+                        # Holding info at the bottom of the box
+                        amt = MY_PORTFOLIO[coin['id']]
+                        if amt > 0:
+                            st.markdown(f"<small>Value: £{price * amt:,.2f}</small>", unsafe_allow_html=True)
 
-except Exception:
-    st.info("Market data syncing...")
+except Exception as e:
+    st.info("Awaiting market data... (CoinGecko API may be busy)")
