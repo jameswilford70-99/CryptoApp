@@ -2,18 +2,22 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 
 # 1. Page Config
-st.set_page_config(page_title="Crypto Detailed Grid", layout="wide")
+st.set_page_config(page_title="Live Crypto Pro (£)", layout="wide")
 
-# 2. Your Portfolio
+# 2. AUTO-REFRESH: Pings every 30 seconds
+st_autorefresh(interval=30000, key="cryptorefresh")
+
+# 3. Your Portfolio
 MY_PORTFOLIO = {
     'bitcoin': 0.1, 'ethereum': 1.0, 'solana': 10.0, 
     'ripple': 500.0, 'toncoin': 50.0, 'cardano': 250.0
 }
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=30)
 def fetch_prices():
     ids = ",".join(MY_PORTFOLIO.keys())
     url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=gbp&ids={ids}&price_change_percentage=24h"
@@ -27,7 +31,12 @@ def fetch_history(coin_id):
     df['Date'] = pd.to_datetime(df['Date'], unit='ms')
     return df
 
-st.title("📈 Detailed Market View (£)")
+# --- UI START ---
+st.title("📈 Live Market Grid (£)")
+
+# Show a global update time at the very top
+current_time = datetime.now().strftime("%H:%M:%S")
+st.markdown(f"**Last Global Sync:** `{current_time}`")
 
 try:
     data = fetch_prices()
@@ -50,18 +59,16 @@ try:
                         change = coin['price_change_percentage_24h'] or 0
                         color = "green" if change >= 0 else "red"
                         
+                        # HEADER
                         st.markdown(f"**{coin['name']}**")
                         st.markdown(f"### £{price:,.2f} <span style='font-size:14px; color:{color}'>({change:+.2f}%)</span>", unsafe_allow_html=True)
                         
-                        # Fetch Data
+                        # CHART
                         df = fetch_history(coin['id'])
-                        
-                        # Create Chart
                         fig = px.line(df, x='Date', y='Price', template="plotly_dark")
                         
-                        # --- THE ZOOM LOGIC ---
                         fig.update_xaxes(
-                            range=[start_date_7d, end_date], # Force default to 7 Days
+                            range=[start_date_7d, end_date],
                             rangeslider_visible=False,
                             rangeselector=dict(
                                 buttons=list([
@@ -73,25 +80,22 @@ try:
                             )
                         )
                         
-                        fig.update_yaxes(
-                            autorange=True, # Automatically zooms in on the data points
-                            fixedrange=False,
-                            showgrid=False,
-                            visible=False # Keep it clean
-                        )
-                        
-                        fig.update_layout(
-                            height=250,
-                            margin=dict(l=5, r=5, t=10, b=10),
-                            hovermode="x unified"
-                        )
+                        fig.update_yaxes(autorange=True, visible=False)
+                        fig.update_layout(height=230, margin=dict(l=5, r=5, t=10, b=10), hovermode="x unified")
                         
                         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         
-                        # Holding Info
+                        # HOLDING INFO & TIMESTAMP
                         amt = MY_PORTFOLIO[coin['id']]
-                        if amt > 0:
-                            st.caption(f"My Stake: {amt} {coin['symbol'].upper()} (Value: £{price * amt:,.2f})")
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.caption(f"Value: £{price * amt:,.2f}")
+                        with col_b:
+                            # Pull the specific 'last_updated' from the API data
+                            api_time = datetime.strptime(coin['last_updated'], "%Y-%m-%dT%H:%M:%S.%fZ")
+                            # Format for UK time (adjusting to local if needed)
+                            formatted_api_time = api_time.strftime("%H:%M:%S")
+                            st.markdown(f"<p style='text-align:right; font-size:12px; color:gray;'>Updated: {formatted_api_time}</p>", unsafe_allow_html=True)
 
-except Exception as e:
-    st.error("Market data is refreshing...")
+except Exception:
+    st.info("Syncing prices...")
