@@ -6,43 +6,59 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 import pytz
 
-# --- 1. PAGE CONFIG & FIXING COLORS ---
+# --- 1. PAGE CONFIG & ADVANCED MODERN STYLING ---
 st.set_page_config(page_title="Crypto Trak", layout="wide", page_icon="📈")
 
-# This CSS forces all text to be visible (Charcoal Black) on the white background
+# Professional Midnight Slate Theme with Glassmorphism
 st.markdown("""
     <style>
-    /* Main App Background */
+    /* Main Background: Deep Midnight Gradient */
     .stApp {
-        background-color: #f8f9fb !important;
+        background: radial-gradient(circle at top right, #1e293b, #0f172a) !important;
     }
-    /* Force all text to be dark charcoal */
-    .stApp, .stMarkdown, p, span, label, h1, h2, h3 {
-        color: #1a1a1a !important;
+    
+    /* Global Text: Soft White/Silver */
+    .stApp, p, span, label, h1, h2, h3 {
+        color: #f1f5f9 !important;
+        font-family: 'Inter', sans-serif;
     }
-    /* Style the sidebar to be light with dark text */
-    [data-testid="stSidebar"] {
-        background-color: #ffffff !important;
-        border-right: 1px solid #e1e4e8;
-    }
-    [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] label {
-        color: #1a1a1a !important;
-    }
-    /* White Cards with subtle borders */
+
+    /* Glassmorphism Cards: Frosted Glass Effect */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: white !important;
-        border: 1px solid #e1e4e8 !important;
-        border-radius: 12px !important;
-        padding: 15px;
+        background: rgba(30, 41, 59, 0.7) !important;
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 20px !important;
+        padding: 20px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
     }
-    /* Fix for the metric numbers */
-    [data-testid="stMetricValue"] {
-        color: #1a1a1a !important;
+
+    /* Sidebar Styling: Sleeker Dark Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #0f172a !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    /* Style the Number Inputs to match the theme */
+    input {
+        background-color: #1e293b !important;
+        color: white !important;
+        border: 1px solid #334155 !important;
+        border-radius: 8px !important;
+    }
+
+    /* Custom Header for Portfolio */
+    .portfolio-header {
+        background: linear-gradient(90deg, #3b82f6, #2dd4bf);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 800;
+        font-size: 2.5rem;
     }
     </style>
     """, unsafe_allow_html=True)
 
-st_autorefresh(interval=30000, key="cryptotrak_refresh")
+st_autorefresh(interval=30000, key="cryptotrak_pro_refresh")
 
 UK_TZ = pytz.timezone('Europe/London')
 API_KEY = "CG-zdKJGMzSeZTkt6xYURjcse11" 
@@ -50,15 +66,8 @@ API_KEY = "CG-zdKJGMzSeZTkt6xYURjcse11"
 COIN_IDS = ['bitcoin', 'ethereum', 'tether', 'solana', 'ripple', 'usd-coin', 'binancecoin', 'dogecoin', 'tron', 'toncoin']
 
 # --- 2. SIDEBAR MANAGER ---
-st.sidebar.title("💳 Crypto Trak")
-st.sidebar.markdown("Manage holdings below.")
-
-user_holdings = {}
-for cid in COIN_IDS:
-    user_holdings[cid] = st.sidebar.number_input(
-        f"{cid.upper()}", 
-        min_value=0.0, step=0.0001, format="%.4f", key=f"trak_{cid}"
-    )
+st.sidebar.markdown("<h2 style='color: #3b82f6 !important;'>💰 Portfolio</h2>", unsafe_allow_html=True)
+user_holdings = {cid: st.sidebar.number_input(f"{cid.upper()}", min_value=0.0, step=0.0001, format="%.4f", key=f"trak_{cid}") for cid in COIN_IDS}
 
 # --- 3. DATA FETCHING ---
 @st.cache_data(ttl=30)
@@ -85,19 +94,20 @@ def fetch_history_pro(coin_id):
         return pd.DataFrame()
 
 # --- 4. UI START ---
-st.title("📈 Crypto Trak")
+st.markdown("<h1 class='portfolio-header'>Crypto Trak</h1>", unsafe_allow_html=True)
 now_uk = datetime.now(UK_TZ)
-st.markdown(f"**Live Feed** • {now_uk.strftime('%H:%M:%S')} UK")
+st.caption(f"Intelligent Market Monitor • {now_uk.strftime('%H:%M:%S')} UK")
 
 data = fetch_prices_pro()
 
 if data == "RATE_LIMIT":
-    st.error("🚨 API Limit. Please wait a moment.")
+    st.error("🚨 API Cooled Down. Retrying in 60s.")
 elif data is None or not isinstance(data, list):
-    st.warning("📡 Connecting to exchanges...")
+    st.warning("📡 Connecting to Satellite Feed...")
 else:
+    # Portfolio Balance Card
     total_val = sum(c['current_price'] * user_holdings.get(c['id'], 0) for c in data)
-    st.metric("Total Balance", f"£{total_val:,.2f}")
+    st.metric("Aggregate Balance", f"£{total_val:,.2f}")
     st.divider()
 
     start_date_7d = now_uk - timedelta(days=7)
@@ -109,20 +119,20 @@ else:
                 coin = data[i + j]
                 with cols[j]:
                     with st.container(border=True):
-                        # API Time Sync
                         api_utc = datetime.strptime(coin['last_updated'], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=pytz.utc)
                         uk_time = api_utc.astimezone(UK_TZ).strftime("%H:%M")
 
-                        st.markdown(f"**{coin['name']}** <span style='float:right; color:#888; font-size:11px;'>{uk_time}</span>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='font-weight: 700; font-size: 18px;'>{coin['name']}</span> <span style='float:right; color:#94a3b8; font-size:11px;'>{uk_time}</span>", unsafe_allow_html=True)
                         
                         change = coin['price_change_percentage_24h'] or 0
-                        color = "#008000" if change >= 0 else "#D2042D" # Strong Green/Red
-                        st.markdown(f"### £{coin['current_price']:,.2f} <span style='color:{color}; font-size:14px;'>({change:+.2f}%)</span>", unsafe_allow_html=True)
+                        # Electric Cyan for Up, Hot Pink for Down
+                        color = "#2dd4bf" if change >= 0 else "#f43f5e"
+                        st.markdown(f"## £{coin['current_price']:,.2f} <span style='color:{color}; font-size:16px;'>{change:+.2f}%</span>", unsafe_allow_html=True)
                         
                         df_hist = fetch_history_pro(coin['id'])
                         if not df_hist.empty:
-                            # Using a crisp blue line on a white background
-                            fig = px.line(df_hist, x='Date', y='Price', template="plotly_white", color_discrete_sequence=['#0066cc'])
+                            # Electric Blue Line
+                            fig = px.line(df_hist, x='Date', y='Price', template="plotly_dark", color_discrete_sequence=['#3b82f6'])
                             fig.update_xaxes(
                                 type='date', range=[start_date_7d, now_uk],
                                 rangeslider_visible=False,
@@ -132,14 +142,19 @@ else:
                                         dict(count=7, label="7D", step="day", stepmode="backward"),
                                         dict(count=1, label="1M", step="month", stepmode="backward"),
                                     ]),
-                                    bgcolor="#f0f2f6", font=dict(size=11, color="#1a1a1a"), y=1.1
+                                    bgcolor="rgba(30, 41, 59, 0.8)", font=dict(size=11, color="white"), y=1.1
                                 ),
-                                showgrid=False
+                                showgrid=False, zeroline=False
                             )
                             fig.update_yaxes(autorange=True, visible=False, showgrid=False)
-                            fig.update_layout(height=240, margin=dict(l=5, r=5, t=5, b=5), hovermode="x unified")
+                            fig.update_layout(
+                                height=240, margin=dict(l=5, r=5, t=5, b=5), 
+                                hovermode="x unified",
+                                paper_bgcolor='rgba(0,0,0,0)',
+                                plot_bgcolor='rgba(0,0,0,0)'
+                            )
                             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         
                         amt = user_holdings.get(coin['id'], 0)
                         if amt > 0:
-                            st.write(f"My Stake: **£{coin['current_price'] * amt:,.2f}**")
+                            st.markdown(f"<p style='color: #94a3b8; font-size: 14px;'>Holding Value: <b style='color:white;'>£{coin['current_price'] * amt:,.2f}</b></p>", unsafe_allow_html=True)
