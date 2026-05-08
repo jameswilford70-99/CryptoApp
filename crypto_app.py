@@ -6,15 +6,6 @@ import plotly.express as px
 # 1. Page Config
 st.set_page_config(page_title="Crypto Grid (£)", layout="wide")
 
-# Custom CSS to make sure the borders are clearly visible
-st.markdown("""
-    <style>
-    div[data-testid="stVerticalBlock"] > div:has(div[data-testid="stVerticalBlock"]) {
-        border-radius: 10px;
-    }
-    </style>
-    """, unsafe_base_with_rows=True)
-
 # 2. Your Portfolio
 MY_PORTFOLIO = {
     'bitcoin': 0.1, 'ethereum': 1.0, 'solana': 10.0, 
@@ -53,14 +44,17 @@ try:
             if i + j < len(data):
                 coin = data[i + j]
                 with cols[j]:
-                    # The 'border=True' creates the white/grey box around the crypto
+                    # The 'border=True' creates the clean box around the content
                     with st.container(border=True):
-                        st.markdown(f"**{coin['name']}** ({coin['symbol'].upper()})")
+                        st.markdown(f"### {coin['name']} ({coin['symbol'].upper()})")
                         
                         # Price and Change
                         price = coin['current_price']
                         change = coin['price_change_percentage_24h'] or 0
-                        st.caption(f"Price: £{price:,.2f} ({change:+.2f}%)")
+                        
+                        # Color coding the percentage change for better visibility
+                        color = "green" if change >= 0 else "red"
+                        st.markdown(f"**£{price:,.2f}** <span style='color:{color}'>({change:+.2f}%)</span>", unsafe_allow_html=True)
                         
                         # Chart
                         df = fetch_history(coin['id'])
@@ -74,25 +68,25 @@ try:
                                     dict(count=1, label="1M", step="month", stepmode="backward"),
                                     dict(step="all", label="MAX")
                                 ]),
-                                font=dict(size=9),
-                                y=1.1 # Move buttons slightly up
+                                font=dict(size=10, color="black"),
+                                bgcolor="#eeeeee"
                             )
                         )
                         
                         fig.update_layout(
-                            height=200,
-                            margin=dict(l=5, r=5, t=5, b=5),
+                            height=220,
+                            margin=dict(l=10, r=10, t=10, b=10),
                             yaxis_visible=False,
                             xaxis_title=None,
-                            xaxis_visible=True # Show dates on the bottom
+                            xaxis_visible=True
                         )
                         
                         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                         
-                        # Holding info at the bottom of the box
+                        # Holding info
                         amt = MY_PORTFOLIO[coin['id']]
                         if amt > 0:
-                            st.markdown(f"<small>Value: £{price * amt:,.2f}</small>", unsafe_allow_html=True)
+                            st.write(f"Value Owned: **£{price * amt:,.2f}**")
 
 except Exception as e:
-    st.info("Awaiting market data... (CoinGecko API may be busy)")
+    st.error(f"Market data syncing... Error: {e}")
