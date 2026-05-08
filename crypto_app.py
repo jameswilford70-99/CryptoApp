@@ -3,83 +3,69 @@ import pandas as pd
 import requests
 import plotly.express as px
 
-# 1. Page Configuration
-st.set_page_config(page_title="My Crypto Monitor (£)", layout="wide")
+# 1. Page Configuration for Mobile
+st.set_page_config(page_title="GBP Crypto Live", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. Top 20 Most Traded Coins (May 2026 Update)
-# Adjust the 'holdings' numbers to your actual amounts!
+# 2. Your Portfolio (Enter the amount you own here)
 MY_PORTFOLIO = {
-    'bitcoin': 0.1, 'ethereum': 1.0, 'solana': 15.0, 'ripple': 500.0,
-    'binancecoin': 0.5, 'dogecoin': 2000.0, 'cardano': 1000.0, 'tron': 0,
-    'toncoin': 50.0, 'shiba-inu': 0, 'avalanche-2': 5.0, 'polkadot': 20.0,
-    'chainlink': 15.0, 'near': 100.0, 'pepe': 0, 'litecoin': 2.0,
-    'bitcoin-cash': 0, 'sui': 100.0, 'aptos': 0, 'render-token': 10.0
+    'bitcoin': 0.1, 'ethereum': 1.0, 'solana': 10.0, 'ripple': 500.0,
+    'binancecoin': 0.5, 'dogecoin': 1000.0, 'cardano': 500.0, 'toncoin': 20.0,
+    'chainlink': 15.0, 'pepe': 0, 'shiba-inu': 0, 'litecoin': 5.0
 }
 
-@st.cache_data(ttl=120)
-def fetch_top_data_gbp():
+# 3. Data Fetching Functions
+@st.cache_data(ttl=120) # Auto-refresh data every 2 mins
+def fetch_market_data():
     ids = ",".join(MY_PORTFOLIO.keys())
-    # Note: vs_currency is now 'gbp'
-    url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=gbp&ids={ids}&price_change_percentage=24h,7d,30d"
+    url = f"https://api.coingecko.com/api/v3/coins/markets?vs_currency=gbp&ids={ids}&price_change_percentage=24h,7d"
     return requests.get(url).json()
 
-@st.cache_data(ttl=3600)
-def get_history_gbp(coin_id, days):
-    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=gbp&days={days}&interval=daily"
-    res = requests.get(url).json()
-    return [p[1] for p in res.get('prices', [])]
+@st.cache_data(ttl=600) # Charts cached for 10 mins
+def fetch_history(coin_id):
+    url = f"https://api.coingecko.com/api/v3/coins/{coin_id}/market_chart?vs_currency=gbp&days=30&interval=daily"
+    response = requests.get(url).json()
+    prices = response.get('prices', [])
+    df = pd.DataFrame(prices, columns=['time', 'price'])
+    df['time'] = pd.to_datetime(df['time'], unit='ms')
+    return df
 
 # --- APP UI ---
-st.title("🇬🇧 Personal Crypto Dashboard")
-st.markdown("Prices in British Pounds (£)")
+st.title("🇬🇧 Live Crypto Tracker")
 
 try:
-    data = fetch_top_data_gbp()
-    total_val_gbp = 0
-    
-    # Pre-calculate Total Portfolio Value in GBP
-    for coin in data:
-        total_val_gbp += coin['current_price'] * MY_PORTFOLIO.get(coin['id'], 0)
+    data = fetch_market_data()
+    total_gbp = sum(coin['current_price'] * MY_PORTFOLIO.get(coin['id'], 0) for coin in data)
 
-    # Global Metric Header
-    st.metric("Total Balance (£)", f"£{total_val_gbp:,.2f}")
+    # Big Total at the top
+    st.metric("Total Portfolio Value", f"£{total_gbp:,.2f}")
     st.divider()
 
-    # Search feature for quick access on mobile
+    # Search Bar
     search = st.text_input("🔍 Search coins...", "").lower()
 
     for coin in data:
         if search and search not in coin['name'].lower() and search not in coin['symbol'].lower():
             continue
             
+        # Extract coin details
+        c_id = coin['id']
         name = coin['name']
-        symbol = coin['symbol'].upper()
         price = coin['current_price']
-        holdings = MY_PORTFOLIO.get(coin['id'], 0)
-        coin_total = price * holdings
+        change_24h = coin['price_change_percentage_24h'] or 0
         
-        # Change metrics
-        c24 = coin.get('price_change_percentage_24h', 0) or 0
-        c7d = coin.get('price_change_percentage_7d_in_currency', 0) or 0
-        c30d = coin.get('price_change_percentage_30d_in_currency', 0) or 0
-
-        # Mobile-friendly expandable view
-        with st.expander(f"**{name}** ({symbol}) - £{price:,.2f}"):
-            col1, col2, col3 = st.columns(3)
-            col1.metric("24h", f"{c24:+.1f}%")
-            col2.metric("7d", f"{c7d:+.1f}%")
-            col3.metric("30d", f"{c30d:+.1f}%")
+        # Display Coin Summary
+        with st.expander(f"**{name}** | £{price:,.2f} | ({change_24h:+.2f}%)"):
+            st.write(f"**Your Holding:** {MY_PORTFOLIO[c_id]} {coin['symbol'].upper()} (£{price * MY_PORTFOLIO[c_id]:,.2f})")
             
-            if holdings > 0:
-                st.success(f"Holdings: {holdings} {symbol} | Value: £{coin_total:,.2f}")
-            
-            # Interactive Plotly Chart
-            if st.button(f"Show 30D Trend for {symbol}", key=coin['id']):
-                hist = get_history_gbp(coin['id'], 30)
-                if hist:
-                    fig = px.line(hist, labels={'value': 'Price (£)', 'index': 'Days Ago'})
-                    fig.update_layout(height=300, margin=dict(l=10, r=10, t=10, b=10))
+            # THE LIVE GRAPH
+            if st.button(f"Load 30D Graph for {name}", key=f"btn_{c_id}"):
+                with st.spinner('Loading live data...'):
+                    history_df = fetch_history(c_id)
+                    fig = px.line(history_df, x='time', y='price', 
+                                 title=f"{name} Price Trend (30 Days)",
+                                 template="plotly_dark")
+                    fig.update_layout(xaxis_title="", yaxis_title="Price (£)", height=300)
                     st.plotly_chart(fig, use_container_width=True)
 
-except Exception as e:
-    st.error("API update pending. Please refresh in a moment.")
+except Exception:
+    st.warning("Data is refreshing... please wait a few seconds.")
